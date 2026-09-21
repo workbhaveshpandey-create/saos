@@ -19,6 +19,12 @@ RED='\033[1;31m'
 BOLD='\033[1m'
 NC='\033[0m'
 
+on_error() {
+  printf "\n  ${RED}✖ Startup stopped on line %s.${NC}\n" "$1"
+  read -r -p "Press Return to close..." _
+}
+trap 'on_error $LINENO' ERR
+
 step()  { printf "\n${CYAN}▸ %s${NC}\n" "$1"; }
 ok()    { printf "  ${GREEN}✔ %s${NC}\n" "$1"; }
 warn()  { printf "  ${YELLOW}⚠ %s${NC}\n" "$1"; }
@@ -83,13 +89,14 @@ fi
 
 if [[ ! -x node_modules/.bin/next ]]; then
   step "Installing dependencies (first time takes a minute)..."
-  $PNPM_CMD install --frozen-lockfile 2>/dev/null || $PNPM_CMD install
+  $PNPM_CMD approve-builds --all 2>/dev/null || true
+  $PNPM_CMD install --frozen-lockfile 2>/dev/null || $PNPM_CMD install || npm install
   ok "Dependencies installed"
 fi
 
 if [[ ! -f .next/BUILD_ID ]]; then
   step "Building SAOS (one-time, please wait)..."
-  $PNPM_CMD run build
+  $PNPM_CMD run build || npx next build
   ok "Build complete"
 fi
 

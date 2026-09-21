@@ -30,8 +30,9 @@ printf "${CYAN}▸ Setting up SAOS in: ${BOLD}%s${NC}\n" "$INSTALL_DIR"
 # 1. Download or update code
 if command -v git >/dev/null 2>&1; then
   if [[ -d "$INSTALL_DIR/.git" ]]; then
-    printf "  Updating existing installation via git...\n"
-    git -C "$INSTALL_DIR" pull --ff-only || true
+    printf "  Updating existing installation to latest...\n"
+    git -C "$INSTALL_DIR" fetch origin main 2>/dev/null || true
+    git -C "$INSTALL_DIR" reset --hard origin/main 2>/dev/null || git -C "$INSTALL_DIR" pull --ff-only || true
   else
     printf "  Cloning repository via git...\n"
     git clone "$REPO_URL" "$INSTALL_DIR"
