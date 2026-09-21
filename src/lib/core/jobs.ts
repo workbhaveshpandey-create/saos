@@ -151,16 +151,29 @@ async function executeJob(id: string, kind: JobKind) {
 
 let startPromise: Promise<{ jobId: string }> | null = null;
 
+const STUCK_JOB_TIMEOUT_MS = 5 * 60 * 1000; // 5 minutes
+
 export async function startScanJob(kind: JobKind) {
   // A double-click or two browser tabs must not mutate the same local twin
   // concurrently. Return the existing job so both views follow one run.
   if (startPromise) return startPromise;
   startPromise = (async () => {
     const db = await getDb();
-    const active = await db.query<{ id: string }>(
-      "SELECT id FROM scan_jobs WHERE status IN ('queued','running') ORDER BY created_at DESC LIMIT 1",
+    const active = await db.query<{ id: string; created_at: string }>(
+      "SELECT id, created_at FROM scan_jobs WHERE status IN ('queued','running') ORDER BY created_at DESC LIMIT 1",
     );
-    if (active.rows[0]) return { jobId: active.rows[0].id };
+    if (active.rows[0]) {
+      const jobAge = Date.now() - new Date(active.rows[0].created_at).getTime();
+      if (jobAge > STUCK_JOB_TIMEOUT_MS) {
+        // Job is stuck (server restart, crash, etc.) — mark failed so we can proceed
+        await db.query(
+          "UPDATE scan_jobs SET status='failed', phase='failed', error='Timed out — job was stuck for over 5 minutes', updated_at=now() WHERE id=$1",
+          [active.rows[0].id],
+        );
+      } else {
+        return { jobId: active.rows[0].id };
+      }
+    }
     const id = await createJob(kind);
     void executeJob(id, kind);
     return { jobId: id };

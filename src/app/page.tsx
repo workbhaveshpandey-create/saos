@@ -215,10 +215,18 @@ export default function Home() {
   const [individualExecutionReport, setIndividualExecutionReport] = useState<ExecutionReport | null>(null);
 
   useEffect(() => {
-    fetch("/api/ai/status", { cache: "no-store" })
-      .then((r) => r.json())
-      .then((d) => setAiStatus(d))
-      .catch(() => setAiStatus(null));
+    const fetchAiStatus = () => {
+      fetch("/api/ai/status", { cache: "no-store" })
+        .then((r) => r.json())
+        .then((d) => setAiStatus(d))
+        .catch(() => {
+          // Keep last known state instead of nulling out —
+          // a transient Ollama hiccup shouldn't disable the button
+        });
+    };
+    fetchAiStatus();
+    const timer = window.setInterval(fetchAiStatus, 10_000);
+    return () => window.clearInterval(timer);
   }, [view]);
 
   useEffect(() => {
@@ -1245,34 +1253,40 @@ export default function Home() {
 
               <button
                 disabled={
-                  !!busy || !!visibleJob || !data || data.objectCount === 0 || !aiStatus?.available
+                  !!busy || !!visibleJob || !data
                 }
                 className={`flex items-center gap-2 border-2 border-[#0d2f3f] px-3 py-2 text-xs font-black shadow-[2px_2px_0_#0d2f3f] brutal-btn sm:px-4 sm:text-sm ${
                   !aiStatus?.available
-                    ? "bg-amber-100 text-amber-950 border-amber-900 cursor-not-allowed opacity-75"
+                    ? "bg-amber-100 text-amber-950 border-amber-900 hover:bg-amber-200"
                     : "bg-[#5edc56] text-[#0d2f3f] hover:bg-[#4ecd46]"
                 }`}
                 onClick={() => {
                   if (!aiStatus?.available) {
                     setNotice(
-                      "LLM Consulting Engine is strictly required to scan. Please select and start an Ollama model in Settings.",
+                      "⚠ Ollama model not detected — scan will use deterministic rules only. For AI-powered explanations, select a model in Settings.",
                     );
-                    return;
                   }
-                  void action("scan", "/api/scan");
+                  if (data && data.objectCount === 0) {
+                    // No records loaded yet — auto-sync first (loads records + scans)
+                    void action("sync", "/api/sync");
+                  } else {
+                    void action("scan", "/api/scan");
+                  }
                 }}
                 type="button"
                 title={
-                  !aiStatus?.available
-                    ? "LLM Consulting Engine must be running and selected in Settings"
-                    : "Run Autonomous Agents & LLM Scan"
+                  data && data.objectCount === 0
+                    ? "Load records from ServiceNow and run health scan"
+                    : !aiStatus?.available
+                      ? "Scan with deterministic rules (Ollama not connected — AI explanations unavailable)"
+                      : "Run Autonomous Agents & LLM Scan"
                 }
               >
                 <Play size={16} weight="fill" />
-                {busy === "scan"
+                {busy === "scan" || busy === "sync"
                   ? "Checking…"
-                  : !aiStatus?.available
-                    ? "LLM Required To Scan"
+                  : data && data.objectCount === 0
+                    ? "Load & Scan"
                     : "Run Agents & Scan"}
               </button>
 
