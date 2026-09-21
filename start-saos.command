@@ -51,40 +51,45 @@ if ! command -v node >/dev/null 2>&1; then
   step "Node.js not found. Installing..."
   if command -v brew >/dev/null 2>&1; then
     brew install node
+  elif [[ "$OSTYPE" == "darwin"* ]]; then
+    warn "Node.js is missing. Downloading official installer..."
+    curl -fsSL https://nodejs.org/dist/v20.18.0/node-v20.18.0.pkg -o /tmp/node-installer.pkg
+    open /tmp/node-installer.pkg
+    fail "Node.js installer launched. Please complete the installation, then re-run this script."
   else
-    fail "Node.js is missing. Install Node.js 24 from https://nodejs.org then double-click this file again."
+    fail "Node.js is missing. Please install Node.js 20+ from https://nodejs.org then run this script again."
   fi
   ok "Node.js $(node -v) installed"
 else
   ok "Node.js $(node -v) found"
 fi
 
-# ── Check / Install: pnpm ───────────────────────────────────────────────────
+# ── Check / Install: pnpm runner ────────────────────────────────────────────
 
-if ! command -v pnpm >/dev/null 2>&1; then
-  step "Installing pnpm..."
-  if command -v corepack >/dev/null 2>&1; then
-    corepack enable 2>/dev/null || true
-    corepack prepare pnpm@latest --activate 2>/dev/null || npm install -g pnpm
-  else
-    npm install -g pnpm
-  fi
-  ok "pnpm installed"
-else
+PNPM_CMD=""
+if command -v pnpm >/dev/null 2>&1; then
+  PNPM_CMD="pnpm"
   ok "pnpm $(pnpm -v) found"
+elif command -v corepack >/dev/null 2>&1 && corepack enable 2>/dev/null && command -v pnpm >/dev/null 2>&1; then
+  PNPM_CMD="pnpm"
+  ok "pnpm activated via corepack"
+else
+  step "Configuring pnpm runner (zero-sudo)..."
+  PNPM_CMD="npx -y pnpm"
+  ok "pnpm ready via npx"
 fi
 
 # ── Install dependencies & build ────────────────────────────────────────────
 
 if [[ ! -x node_modules/.bin/next ]]; then
   step "Installing dependencies (first time takes a minute)..."
-  pnpm install --frozen-lockfile 2>/dev/null || pnpm install
+  $PNPM_CMD install --frozen-lockfile 2>/dev/null || $PNPM_CMD install
   ok "Dependencies installed"
 fi
 
 if [[ ! -f .next/BUILD_ID ]]; then
   step "Building SAOS (one-time, please wait)..."
-  pnpm run build
+  $PNPM_CMD run build
   ok "Build complete"
 fi
 
